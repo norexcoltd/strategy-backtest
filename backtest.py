@@ -2004,7 +2004,7 @@ def load_hourly_top150(start_dt, end_dt):
     result = {}
     for _, row in df.iterrows():
         dt = row[time_col].to_pydatetime().replace(minute=0, second=0, microsecond=0)
-        syms = row["symbols"] if isinstance(row["symbols"], list) else []
+        syms = list(row["symbols"]) if hasattr(row["symbols"], '__iter__') and not isinstance(row["symbols"], str) else []
         result[dt] = set(syms)
     logger.info(f"hourly_top150: {len(result)} hours")
     return result
