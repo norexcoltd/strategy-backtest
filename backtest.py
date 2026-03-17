@@ -205,34 +205,135 @@ def generate_monthly_batches(start, end):
     return batches
 
 
-# === 메인: 데이터 로딩 테스트 (시뮬레이터는 다음 단계) ===
+# === 메인: 전체 백테스트 실행 ===
 if __name__ == "__main__":
+    from simulator import GPUPortfolioSimulator
+
     logger.info("=" * 60)
-    logger.info("Kaggle GPU Backtest - Data Loading Test")
+    logger.info("Kaggle GPU Backtest")
+    logger.info(f"Period: {BACKTEST_START.date()} ~ {BACKTEST_END.date()}")
+    logger.info(f"Device: {DEVICE}")
+    logger.info(f"Long: {LONG_UTILIZATION*100}%/{LONG_LEVERAGE}x, Short: {SHORT_UTILIZATION*100}%/{SHORT_LEVERAGE}x")
     logger.info("=" * 60)
 
+    # 시뮬레이터 생성
+    simulator = GPUPortfolioSimulator(
+        initial_wallet=INITIAL_WALLET,
+        long_utilization=LONG_UTILIZATION,
+        short_utilization=SHORT_UTILIZATION,
+        long_leverage=LONG_LEVERAGE,
+        short_leverage=SHORT_LEVERAGE,
+        device=DEVICE,
+    )
+
+    # 데이터 로드
     hourly = load_hourly_top150(BACKTEST_START, BACKTEST_END)
     batches = generate_monthly_batches(BACKTEST_START, BACKTEST_END)
-    total_time = 0
+    logger.info(f"Batches: {len(batches)}")
 
-    for i, (bs, be) in enumerate(batches):
-        symbols = get_month_symbols(hourly, bs, be)
-        logger.info(f"[Batch {i+1}/{len(batches)}] {bs.strftime('%Y-%m')}: {len(symbols)} sym")
+    total_start = time.time()
 
+    for i, (batch_start, batch_end) in enumerate(batches):
+        symbols = get_month_symbols(hourly, batch_start, batch_end)
+
+        logger.info(f"\n{'='*60}")
+        logger.info(f"[Batch {i+1}/{len(batches)}] {batch_start.strftime('%Y-%m')} ({batch_start.date()} ~ {batch_end.date()})")
+        logger.info(f"  Symbols: {len(symbols)}, Top 5: {symbols[:5]}")
+
+        # 데이터 로드
         t0 = time.time()
-        dt = load_batch(symbols, bs, be)
-        elapsed = time.time() - t0
-        total_time += elapsed
+        data_tensor = load_batch(symbols, batch_start, batch_end)
+        load_time = time.time() - t0
 
-        logger.info(f"  shape={dt.shape}, device={dt.device}, time={elapsed:.1f}s, "
-                     f"RAM={psutil.Process().memory_info().rss/1024**3:.2f}GB, "
-                     f"VRAM={torch.cuda.memory_allocated()/1024**3:.2f}GB")
+        # 시뮬레이션 실행
+        t1 = time.time()
+        equity_before = simulator.equity
+        trades_before = len(simulator.trades)
 
-        del dt; gc.collect()
+        with torch.no_grad():
+            result = simulator.run_simulation(
+                symbols=symbols,
+                start_date=batch_start,
+                end_date=batch_end,
+                data_tensor=data_tensor,
+                hourly_top150=hourly,
+            )
+
+        sim_time = time.time() - t1
+        equity_after = simulator.equity
+        withdrawn_after = simulator.total_withdrawn
+        month_trades = len(simulator.trades) - trades_before
+        month_pnl = (equity_after - equity_before) + (withdrawn_after - (simulator.total_withdrawn - (withdrawn_after - withdrawn_after)))
+
+        logger.info(f"  Load: {load_time:.1f}s, Sim: {sim_time:.1f}s")
+        logger.info(f"  Equity: ${equity_after:,.0f}, Trades: {month_trades}, Total: {len(simulator.trades)}")
+        logger.info(f"  RAM: {psutil.Process().memory_info().rss/1024**3:.2f}GB, "
+                     f"VRAM: {torch.cuda.memory_allocated()/1024**3:.2f}GB")
+
+        # 쿨다운 이월
+        batch_bars = int((batch_end - batch_start).total_seconds() / 60)
+        simulator.cooldown_until = max(0, simulator.cooldown_until - batch_bars)
+
+        # 메모리 해제
+        del data_tensor
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    total_time = time.time() - total_start
+
+    # === 최종 결과 ===
+    logger.info("\n" + "=" * 60)
+    logger.info("FINAL RESULTS")
     logger.info("=" * 60)
-    logger.info(f"Total load time: {total_time:.1f}s ({total_time/len(batches):.1f}s/batch)")
-    logger.info(f"Final RAM: {psutil.Process().memory_info().rss/1024**3:.2f}GB")
+
+    trades = simulator.get_trades()
+    final_equity = simulator.equity
+    total_withdrawn = simulator.total_withdrawn
+    total_asset = final_equity + total_withdrawn
+    total_return = (total_asset - INITIAL_WALLET) / INITIAL_WALLET * 100
+
+    logger.info(f"Final Equity: ${final_equity:,.0f}")
+    logger.info(f"Total Withdrawn: ${total_withdrawn:,.0f}")
+    logger.info(f"Total Asset: ${total_asset:,.0f} (+{total_return:,.1f}%)")
+    logger.info(f"Total Trades: {len(trades)}")
+    logger.info(f"Total Time: {total_time:.0f}s ({total_time/len(batches):.1f}s/batch)")
+
+    # 방향별 요약
+    long_trades = [t for t in trades if t["direction"] == "long"]
+    short_trades = [t for t in trades if t["direction"] == "short"]
+    long_pnl = sum(t["realized_pnl"] for t in long_trades)
+    short_pnl = sum(t["realized_pnl"] for t in short_trades)
+    long_wr = sum(1 for t in long_trades if t["realized_pnl"] > 0) / max(len(long_trades), 1) * 100
+    short_wr = sum(1 for t in short_trades if t["realized_pnl"] > 0) / max(len(short_trades), 1) * 100
+
+    logger.info(f"\nLONG:  {len(long_trades)} trades, WR {long_wr:.1f}%, PnL ${long_pnl:+,.0f}")
+    logger.info(f"SHORT: {len(short_trades)} trades, WR {short_wr:.1f}%, PnL ${short_pnl:+,.0f}")
+
+    # 결과 CSV 저장 (Kaggle output으로 다운로드 가능)
+    import json
+    output_dir = Path("/kaggle/working")
+    output_dir.mkdir(exist_ok=True)
+
+    with open(output_dir / "result_summary.json", "w") as f:
+        json.dump({
+            "total_asset": total_asset,
+            "total_return_pct": total_return,
+            "final_equity": final_equity,
+            "total_withdrawn": total_withdrawn,
+            "total_trades": len(trades),
+            "long_trades": len(long_trades),
+            "short_trades": len(short_trades),
+            "long_pnl": long_pnl,
+            "short_pnl": short_pnl,
+            "long_wr": long_wr,
+            "short_wr": short_wr,
+            "total_time_sec": total_time,
+            "device": DEVICE,
+            "long_leverage": LONG_LEVERAGE,
+            "short_leverage": SHORT_LEVERAGE,
+        }, f, indent=2)
+
+    pd.DataFrame(trades).to_csv(output_dir / "trades.csv", index=False)
+    logger.info(f"\nResults saved to {output_dir}")
     logger.info("=" * 60)
