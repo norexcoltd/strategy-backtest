@@ -8,6 +8,12 @@ Kaggle GPU Backtest Runner
 - v42 설정: 롱 1h BB 진입 + 4h 모멘텀/BB_TP/손절 + 롱 20x
 """
 
+# GitHub에서 simulator.py 가져오기
+import subprocess
+subprocess.run(["git", "clone", "https://github.com/norexcoltd/strategy-backtest.git", "/kaggle/working/repo"], capture_output=True)
+import sys
+sys.path.insert(0, "/kaggle/working/repo")
+
 import sys
 import os
 import gc
@@ -35,7 +41,25 @@ print(f"RAM: {psutil.virtual_memory().total / 1024**3:.1f} GB")
 
 # === 설정 ===
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DATA_DIR = Path("/kaggle/input/datasets/norexinc/parquet")
+# 데이터 경로 자동 감지
+_candidates = [
+    Path("/kaggle/input/parquet"),
+    Path("/kaggle/input/datasets/norexinc/parquet"),
+    Path("/kaggle/input/norexinc/parquet"),
+]
+DATA_DIR = None
+for p in _candidates:
+    if p.exists():
+        DATA_DIR = p
+        break
+if DATA_DIR is None:
+    # 실제 경로 탐색
+    import glob
+    found = glob.glob("/kaggle/input/**/symbol_map.csv", recursive=True)
+    if found:
+        DATA_DIR = Path(found[0]).parent
+    else:
+        raise FileNotFoundError(f"Data not found in: {_candidates}. /kaggle/input contents: {os.listdir('/kaggle/input') if os.path.exists('/kaggle/input') else 'N/A'}")
 INITIAL_WALLET = 13000.0
 BACKTEST_START = datetime(2024, 2, 1)
 BACKTEST_END = datetime(2026, 3, 1)
