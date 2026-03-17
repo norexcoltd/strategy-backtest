@@ -2015,7 +2015,10 @@ def load_batch(symbols, start_date, end_date):
     symbol_ids = [get_symbol_id(s) for s in symbols]
     valid_sid = [sid for sid in symbol_ids if sid is not None]
     feat_cols = [f"f{i:02d}" for i in range(79)]
+    # indicator 폴더 자동 감지
     ind_dir = DATA_DIR / "indicator"
+    if not ind_dir.exists():
+        ind_dir = DATA_DIR  # 폴더 없이 바로 parquet 있는 경우
 
     months = []
     cur = datetime(start_date.year, start_date.month, 1)
