@@ -1,12 +1,14 @@
 {
-  "id": "norexinc/strategy-backtest",
-  "title": "STRATEGY_BACKTEST",
+  "id": "norexinc/strategy-backtest-gpu",
+  "title": "strategy-backtest-gpu",
   "code_file": "backtest.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
-  "enable_gpu": true,
+  "enable_gpu": "true",
   "dataset_sources": [
     "norexinc/parquet"
-  ]
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
 }

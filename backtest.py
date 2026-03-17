@@ -35,7 +35,7 @@ print(f"RAM: {psutil.virtual_memory().total / 1024**3:.1f} GB")
 
 # === 설정 ===
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DATA_DIR = Path("/kaggle/input/parquet")
+DATA_DIR = Path("/kaggle/input/datasets/norexinc/parquet")
 INITIAL_WALLET = 13000.0
 BACKTEST_START = datetime(2024, 2, 1)
 BACKTEST_END = datetime(2026, 3, 1)
