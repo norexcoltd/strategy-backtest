@@ -1,0 +1,12 @@
+{
+  "id": "norexinc/strategy-backtest",
+  "title": "STRATEGY_BACKTEST",
+  "code_file": "backtest.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "dataset_sources": [
+    "norexinc/parquet"
+  ]
+}
