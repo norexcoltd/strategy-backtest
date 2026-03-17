@@ -1947,8 +1947,8 @@ print(f"RAM: {psutil.virtual_memory().total / 1024**3:.1f} GB")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # 데이터 경로 자동 감지
 _candidates = [
-    Path("/kaggle/input/parquet"),
     Path("/kaggle/input/datasets/norexinc/parquet"),
+    Path("/kaggle/input/parquet"),
     Path("/kaggle/input/norexinc/parquet"),
 ]
 DATA_DIR = None
