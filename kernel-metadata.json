@@ -1,6 +1,6 @@
 {
-  "id": "norexinc/strategy-backtest-gpu",
-  "title": "strategy-backtest-gpu",
+  "id": "norexinc/strategy-backtest",
+  "title": "STRATEGY_BACKTEST",
   "code_file": "backtest.py",
   "language": "python",
   "kernel_type": "script",
